@@ -1,0 +1,44 @@
+{
+  "name": "saucebase/themes",
+  "description": "A visual theme editor for Saucebase: colours, fonts, radius and shadows, with live preview.",
+  "type": "saucebase-module",
+  "license": "MIT",
+  "version": "v3.3.0",
+  "require": {
+    "saucebase/core": "^1.13"
+  },
+  "authors": [
+    {
+      "name": "Saucebase",
+      "email": "hello@saucebase.dev"
+    }
+  ],
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Themes\\Providers\\ThemesServiceProvider"
+      ],
+      "aliases": {}
+    },
+    "saucebase": {
+      "frameworks": [
+        "vue",
+        "react"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Themes\\": "src/",
+      "Modules\\Themes\\Database\\Factories\\": "database/factories/",
+      "Modules\\Themes\\Database\\Seeders\\": "database/seeders/",
+      "Modules\\Themes\\Tests\\Support\\": "tests/Support/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\Themes\\Tests\\": "tests/"
+    }
+  },
+  "minimum-stability": "stable"
+}

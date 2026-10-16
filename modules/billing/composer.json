@@ -1,0 +1,45 @@
+{
+  "name": "saucebase/billing",
+  "description": "Stripe billing for Saucebase: checkout, subscriptions, trials, a pricing page and invoices.",
+  "type": "saucebase-module",
+  "version": "v3.1.2",
+  "authors": [
+    {
+      "name": "Saucebase",
+      "email": "hello@saucebase.dev"
+    }
+  ],
+  "require": {
+    "saucebase/core": "^1.13",
+    "stripe/stripe-php": "^22.0"
+  },
+  "license": "MIT",
+  "minimum-stability": "stable",
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Billing\\Providers\\BillingServiceProvider"
+      ],
+      "aliases": {}
+    },
+    "saucebase": {
+      "frameworks": [
+        "vue",
+        "react"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Billing\\": "src/",
+      "Modules\\Billing\\Database\\Factories\\": "database/factories/",
+      "Modules\\Billing\\Database\\Seeders\\": "database/seeders/",
+      "Modules\\Billing\\Tests\\Support\\": "tests/Support/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\Billing\\Tests\\": "tests/"
+    }
+  }
+}

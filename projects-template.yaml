@@ -1,0 +1,28 @@
+# Draft: set ref to a tested public commit before registry submission.
+guided:
+  category: saas
+  framework: laravel
+
+template: saucebase/laravel-saas
+variant: vue-laravel-cloud
+default: true
+variant_description: Vue · Laravel Cloud · MySQL · Stripe · Resend
+install_command: composer projects:install
+
+metadata:
+  name: Saucebase Laravel SaaS Starter
+  description: Modular Vue and Laravel SaaS starter with authentication, billing, and transactional email
+  owner: saucebase
+  tags: [Laravel, PHP, Vue, Inertia, Filament, SaaS, Billing]
+
+repo: https://github.com/saucebase-dev/vue-laravel-saas-starter
+ref: ""
+
+services:
+  - laravel_cloud/application
+  - stripe/sandbox
+  - resend/email
+
+next_steps:
+  - label: Prepare the database and run locally
+    command: composer projects:dev

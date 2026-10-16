@@ -1,0 +1,10 @@
+--- a/app/Models/User.php
++++ b/app/Models/User.php
+@@ -11,2 +11,3 @@
+ use Illuminate\Notifications\Notifiable;
++use Modules\Auth\Traits\Sociable;
+ use Saucebase\Core\Settings\LocalizationSettings;
+@@ -25,2 +26,3 @@
+     use Notifiable;
++    use Sociable;
+ 

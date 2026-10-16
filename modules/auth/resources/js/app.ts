@@ -1,0 +1,47 @@
+import { router } from '@inertiajs/vue3';
+import { LogOut } from '@lucide/vue';
+import { useDialog } from '@saucebase/vue/composables/useDialog';
+import { registerGlobalComponent } from '@saucebase/vue/lib/globalComponents';
+import { registerAction, registerIcon } from '@saucebase/vue/lib/navigation';
+import { trans } from 'laravel-vue-i18n';
+import IconLogOut from '~icons/lucide/log-out';
+import IconSettings from '~icons/lucide/settings';
+import IconShieldCheck from '~icons/lucide/shield-check';
+import IconUserCircle from '~icons/lucide/user-circle';
+import ImpersonationAlert from './components/ImpersonationAlert.vue';
+
+export function setup() {
+    registerIcon('logout', IconLogOut);
+    registerIcon('settings', IconSettings);
+    registerIcon('profile', IconUserCircle);
+    registerIcon('security', IconShieldCheck);
+    registerAuthActions();
+    registerGlobalComponent('top', ImpersonationAlert);
+}
+
+/**
+ * Register auth-related navigation actions
+ */
+function registerAuthActions() {
+    // Logout action
+    registerAction('logout', async (event: MouseEvent) => {
+        event.preventDefault();
+
+        const { confirm } = useDialog();
+        if (
+            await confirm({
+                title: trans('Log out'),
+                description: trans(
+                    'Are you sure you want to log out? You will need to sign in again.',
+                ),
+                confirmLabel: trans('Log out'),
+                cancelLabel: trans('Cancel'),
+                variant: 'destructive',
+                icon: LogOut,
+                align: 'left',
+            })
+        ) {
+            router.post(route('logout'));
+        }
+    });
+}

@@ -1,0 +1,199 @@
+<?php
+
+namespace Modules\Billing\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
+use Modules\Billing\Actions\StartCheckout;
+use Modules\Billing\Contracts\BillingOwner;
+use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
+use Modules\Billing\Models\CheckoutSession;
+use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
+use Modules\Billing\Services\BillingOwners;
+use Modules\Billing\Services\PurchaseEligibility;
+use Modules\Billing\Settings\BillingSettings;
+use Saucebase\Core\Toast;
+use Symfony\Component\HttpFoundation\Response;
+
+class CheckoutController
+{
+    public function __construct(
+        private StartCheckout $startCheckout,
+        private PurchaseEligibility $eligibility,
+        private BillingSettings $settings,
+        private BillingOwners $owners,
+    ) {}
+
+    public function create(Request $request): Response|InertiaResponse
+    {
+        $validated = $request->validate([
+            'price_id' => ['required', 'integer'],
+        ]);
+
+        $price = Price::purchasable()->find($validated['price_id']);
+
+        if (! $price) {
+            throw ValidationException::withMessages(['price_id' => __('This plan is not available.')]);
+        }
+
+        // A guest has no owner yet and goes through registration; anyone signed
+        // in must be allowed to buy for the owner they act for.
+        $owner = $request->user() ? $this->owners->managedBy($request->user()) : null;
+
+        // Refused before a session exists, guests included: a pending session
+        // freezes its plan. processCheckout() checks again once a guest signs in.
+        $this->eligibility->assertCanBuy($owner, $price);
+
+        // Under the plan's row lock, the same one an admin edit takes: once this
+        // pending session exists the plan's terms are fixed (Product::isSold()),
+        // and the provider is only called after it does.
+        $session = DB::transaction(function () use ($price) {
+            Product::whereKey($price->product_id)->lockForUpdate()->first();
+
+            return CheckoutSession::create([
+                'price_id' => $price->id,
+                'status' => CheckoutSessionStatus::Pending,
+                'expires_at' => now()->addMinutes($this->settings->checkout_expire_after_minutes),
+            ]);
+        });
+
+        // Straight to the gateway when we already know who is buying. Going via
+        // the checkout route would work too, but an Inertia visit follows that
+        // redirect over XHR and dies on the gateway's CORS policy; Inertia's own
+        // location response tells the browser to navigate instead.
+        if ($owner && $this->settings->redirect_to_gateway) {
+            return $this->sendToGateway($session, $owner, $request->user());
+        }
+
+        return redirect()->route('billing.checkout', $session);
+    }
+
+    public function show(Request $request, CheckoutSession $checkoutSession): Response|InertiaResponse
+    {
+        abort_if($checkoutSession->status !== CheckoutSessionStatus::Pending, 410);
+        abort_if($checkoutSession->expires_at?->isPast(), 410);
+
+        $owner = $this->ownerOf($checkoutSession, $request->user());
+
+        $checkoutSession->load('price.product');
+
+        // Straight to the gateway: it asks for the email, the address and the
+        // promotion code itself, so our own page would only ask twice. The
+        // session row is still written first, which is what the funnel reads.
+        if ($this->settings->redirect_to_gateway) {
+            return $this->sendToGateway($checkoutSession, $owner, $request->user());
+        }
+
+        return Inertia::render('Billing::Checkout', [
+            'session' => $checkoutSession,
+        ]);
+    }
+
+    public function store(Request $request, CheckoutSession $checkoutSession): Response
+    {
+        abort_if($checkoutSession->status !== CheckoutSessionStatus::Pending, 410);
+        abort_if($checkoutSession->expires_at?->isPast(), 410);
+
+        $owner = $this->ownerOf($checkoutSession, $request->user());
+
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+            'coupon' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $result = $this->startCheckout->handle(
+                session: $checkoutSession,
+                owner: $owner,
+                buyer: $request->user(),
+                successUrl: $this->returnUrl($checkoutSession),
+                cancelUrl: route('billing.checkout', $checkoutSession),
+                billingDetails: ['email' => $validated['email']],
+                coupon: $validated['coupon'] ?? null,
+            );
+        } catch (GatewayOperationFailedException $e) {
+            report($e);
+
+            // Back to this checkout's own page: submitting again reuses the session.
+            Toast::error(__('We could not reach the payment provider. Please try again.'));
+
+            return back();
+        }
+
+        return Inertia::location($result->url);
+    }
+
+    /**
+     * The owner the buyer may act for, and the one this session is for.
+     *
+     * A session belongs to nobody until the first hand-off binds it to a customer.
+     * After that only that customer's owner may act on it, or one signed-in user
+     * could take over another's pending checkout by visiting its URL.
+     */
+    private function ownerOf(CheckoutSession $session, User $user): BillingOwner
+    {
+        $owner = $this->owners->managedBy($user);
+
+        abort_if($session->customer_id && $session->customer_id !== $owner->billingAccount()?->id, 403);
+
+        return $owner;
+    }
+
+    /**
+     * Hand the buyer over to the payment provider.
+     *
+     * `Inertia::location()` rather than a plain redirect: it answers an Inertia
+     * visit with a 409 telling the browser to navigate, and a normal visit with
+     * an ordinary redirect. A plain redirect would be followed over XHR and
+     * blocked by the provider's CORS policy.
+     */
+    private function sendToGateway(CheckoutSession $session, BillingOwner $owner, User $buyer): Response|InertiaResponse
+    {
+        try {
+            $result = $this->startCheckout->handle(
+                session: $session,
+                owner: $owner,
+                buyer: $buyer,
+                successUrl: $this->returnUrl($session),
+                // Not back here: this route hands off to the gateway, so cancelling
+                // would bounce the buyer straight back to the payment page.
+                cancelUrl: route('billing.plans'),
+            );
+        } catch (GatewayOperationFailedException $e) {
+            report($e);
+
+            // Rendered, not redirected: the checkout URL hands off again on its
+            // own, so a redirect there would loop. Trying again posts this same
+            // session, so the provider sees the same request and idempotency key.
+            return Inertia::render('Billing::Checkout', [
+                'session' => $session->load('price.product'),
+                'handoffFailed' => true,
+            ]);
+        }
+
+        return Inertia::location($result->url);
+    }
+
+    /** Try the hand-off again, for this checkout only. */
+    public function retry(Request $request, CheckoutSession $checkoutSession): Response|InertiaResponse
+    {
+        abort_if($checkoutSession->status !== CheckoutSessionStatus::Pending, 410);
+        abort_if($checkoutSession->expires_at?->isPast(), 410);
+
+        $owner = $this->ownerOf($checkoutSession, $request->user());
+
+        return $this->sendToGateway($checkoutSession, $owner, $request->user());
+    }
+
+    /** Names our checkout, which any provider can carry back; no provider's template. */
+    private function returnUrl(CheckoutSession $session): string
+    {
+        return route('settings.billing', ['checkout_session' => $session->uuid]);
+    }
+}

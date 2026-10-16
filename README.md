@@ -1,58 +1,95 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Saucebase Laravel SaaS Starter
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A starting point for building a SaaS app with Laravel and Vue. It includes sign-up and login, billing, themes, a blog, a roadmap, announcements, and a coming-soon page.
 
-## About Laravel
+The planned Stripe Projects setup uses Laravel Cloud to host the app, MySQL to store its data, Stripe for test payments, and Resend to send email. Cloudflare can provide an optional custom domain.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+**The app runs locally. The automatic Projects setup is still being built.**
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Get started
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+You need PHP 8.4+, Composer, Node 22.12+, and npm 10.5.1+.
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer projects:install
+composer projects:dev
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The first command installs dependencies and builds the frontend. The second prepares the database, adds the starter plans, and starts the app.
 
-## Contributing
+You can run setup again without losing users, changing your application key, or replacing plans you have edited.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Local development uses SQLite. Emails are written to the app's log instead of being sent.
 
-## Code of Conduct
+If you use Laravel Herd, run `composer projects:prepare`, then use Herd and your usual frontend development command.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Payments
 
-## Security Vulnerabilities
+The app starts with Free and Pro plans. Pro has example prices of 29 per month or 290 per year, in the billing currency you choose. Edit these plans to suit your product.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+After Stripe Projects connects a sandbox, send your plans to Stripe:
 
-## License
+```bash
+php artisan billing:push-catalog
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+To bring later changes from Stripe back into the app:
+
+```bash
+php artisan billing:sync-catalog
+```
+
+Use a Stripe sandbox while testing. Setup does not create demo users or subscriptions, and it does not publish plans to Stripe automatically.
+
+Stripe also needs to send payment updates back to the app. This is called a webhook. Automatic webhook setup is still unfinished. See the [billing module guide](modules/billing/README.md) for the events it uses.
+
+## Email and API keys
+
+Stripe Projects should create the services and supply their API keys. The template should connect those keys to Laravel automatically, so you do not have to copy them by hand.
+
+That automatic connection still needs to be completed and tested. Projects supplies keys locally; our deployment setup also needs to pass them securely to Laravel Cloud.
+
+For email, you choose a sender address and verify that you own its domain. Resend can then send account verification, password reset, and billing emails.
+
+## Hosting
+
+The app is being prepared for Laravel Cloud with a MySQL database. Our initial region choice is Ireland (`eu-west-1`). When creating your own app, use your own repository and preferred region.
+
+These commands are ready for the Cloud settings:
+
+| Setting | Command |
+| --- | --- |
+| Build | `composer cloud:build` |
+| Deploy | `composer cloud:deploy` |
+| Process background jobs | `php artisan queue:work --tries=3` |
+| Render pages on the server | `php artisan inertia:start-ssr` |
+
+Enable Cloud's scheduler so regular billing tasks run. Use PHP 8.4+ and a Node version that meets the requirements above.
+
+Cloud should supply the database connection details. The hosted app also needs its public URL, debug mode turned off, and a permanent application key. The deployment command requires that key to be set already.
+
+Store uploaded files in Cloud object storage so they survive deployments. Public uploads, such as avatars and blog images, need a public bucket connected as the `public` disk. Private files need a separate private bucket. Let Cloud configure the disks rather than keeping a local storage override.
+
+The production build has passed in a clean copy. A real Cloud deployment, automatic key delivery, email, payments, and file uploads still need to be tested together.
+
+## Custom domain
+
+You can use an existing domain or buy one through Cloudflare. Connect it to Laravel Cloud and add the DNS records Resend needs for email.
+
+A custom domain is optional for hosting: Cloud gives the app an address to start with. Sending email still requires a verified sender domain.
+
+## Publishing the template
+
+[projects-template.yaml](projects-template.yaml) describes the planned Projects template. It is a draft and has not been published.
+
+Once the full setup works, we will push a tested version to the public repository, add its commit to the template file, and submit that file to Stripe's template registry.
+
+## Development checks
+
+```bash
+php artisan test --compact --testsuite=Feature
+vendor/bin/pint --dirty --format agent
+npm run build
+```
+
+Laravel Boost includes guidance for the app and its modules. Refresh it with `composer boost:update`.

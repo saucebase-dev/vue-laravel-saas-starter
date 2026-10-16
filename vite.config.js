@@ -1,24 +1,13 @@
+import { saucebase } from './vendor/saucebase/core/resources/js/vue/vite.ts';
+import fs from 'node:fs';
 import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
-import { bunny } from 'laravel-vite-plugin/fonts';
-import tailwindcss from '@tailwindcss/vite';
+
+const sslKey = 'docker/ssl/app.key.pem';
+const sslCert = 'docker/ssl/app.pem';
 
 export default defineConfig({
-    plugins: [
-        laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
-            refresh: true,
-            fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
-                }),
-            ],
-        }),
-        tailwindcss(),
-    ],
-    server: {
-        watch: {
-            ignored: ['**/storage/framework/views/**'],
-        },
-    },
+    plugins: [saucebase()],
+    server: fs.existsSync(sslCert)
+        ? { https: { key: fs.readFileSync(sslKey), cert: fs.readFileSync(sslCert) } }
+        : {},
 });

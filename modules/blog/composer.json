@@ -1,0 +1,44 @@
+{
+  "name": "saucebase/blog",
+  "description": "A blog for Saucebase: posts, categories, tags, RSS and SEO, managed from the admin.",
+  "type": "saucebase-module",
+  "license": "MIT",
+  "version": "v3.2.0",
+  "authors": [
+    {
+      "name": "Saucebase",
+      "email": "hello@saucebase.dev"
+    }
+  ],
+  "require": {
+    "saucebase/core": "^1.13",
+    "spatie/laravel-feed": "^4.5"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Blog\\Providers\\BlogServiceProvider"
+      ],
+      "aliases": {}
+    },
+    "saucebase": {
+      "frameworks": [
+        "vue",
+        "react"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Blog\\": "src/",
+      "Modules\\Blog\\Database\\Factories\\": "database/factories/",
+      "Modules\\Blog\\Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\Blog\\Tests\\": "tests/"
+    }
+  },
+  "minimum-stability": "stable"
+}

@@ -1,0 +1,61 @@
+<?php
+
+namespace Modules\Roadmap\Filament\Resources\Roadmap;
+
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables\Table;
+use Modules\Roadmap\Filament\Resources\Roadmap\Pages\CreateRoadmapItem;
+use Modules\Roadmap\Filament\Resources\Roadmap\Pages\EditRoadmapItem;
+use Modules\Roadmap\Filament\Resources\Roadmap\Pages\ListRoadmapItems;
+use Modules\Roadmap\Filament\Resources\Roadmap\Schemas\RoadmapItemForm;
+use Modules\Roadmap\Filament\Resources\Roadmap\Tables\RoadmapItemsTable;
+use Modules\Roadmap\Models\RoadmapItem;
+
+class RoadmapItemResource extends Resource
+{
+    protected static ?string $model = RoadmapItem::class;
+
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-map';
+
+    protected static ?int $navigationSort = 3;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage roadmap') ?? false;
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('Roadmap');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Roadmap item');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Roadmap');
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return RoadmapItemForm::configure($schema);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return RoadmapItemsTable::configure($table);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListRoadmapItems::route('/'),
+            'create' => CreateRoadmapItem::route('/create'),
+            'edit' => EditRoadmapItem::route('/{record}/edit'),
+        ];
+    }
+}

@@ -1,23 +1,38 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "app/vue-laravel-saas-starter",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "A Vue and Laravel SaaS starter powered by Saucebase and Stripe Projects.",
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.3",
         "laravel/framework": "^13.17",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "league/flysystem-aws-s3-v3": "^3.35",
+        "resend/resend-php": "^1.16",
+        "saucebase/announcements": "^3.3",
+        "saucebase/auth": "^3.3",
+        "saucebase/billing": "^3.1",
+        "saucebase/blog": "^3.2",
+        "saucebase/coming-soon": "^0.1.1",
+        "saucebase/core": "^1.13",
+        "saucebase/roadmap": "^3.3",
+        "saucebase/themes": "^3.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "laravel/boost": "^2.10",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^12.5.12"
+        "phpunit/phpunit": "^12.5.12",
+        "saucebase/laravel-playwright": "^1.1"
     },
     "autoload": {
         "psr-4": {
@@ -33,12 +48,8 @@
     },
     "scripts": {
         "setup": [
-            "composer install",
-            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
-            "@php artisan key:generate",
-            "@php artisan migrate --force",
-            "npm install --ignore-scripts",
-            "npm run build"
+            "@projects:install",
+            "@projects:prepare"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
@@ -50,7 +61,9 @@
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
-            "@php artisan package:discover --ansi"
+            "@php artisan package:discover --ansi",
+            "@php artisan filament:upgrade",
+            "@php artisan module:generate-types --all --no-interaction --ansi"
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
@@ -65,6 +78,32 @@
         ],
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
+        ],
+        "projects:install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "composer install --no-interaction",
+            "npm ci",
+            "npm run build"
+        ],
+        "projects:prepare": [
+            "@php artisan projects:prepare --no-interaction"
+        ],
+        "projects:dev": [
+            "@projects:prepare",
+            "@dev"
+        ],
+        "cloud:build": [
+            "composer install --no-dev --prefer-dist --no-interaction",
+            "npm ci",
+            "npm run build",
+            "@php artisan optimize"
+        ],
+        "cloud:deploy": [
+            "@projects:prepare"
+        ],
+        "boost:update": [
+            "@php artisan modules:boost --no-interaction",
+            "@php artisan boost:update --no-interaction"
         ]
     },
     "extra": {
@@ -78,9 +117,20 @@
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true,
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "saucebase/module-installer": true
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "path",
+            "url": "modules/*",
+            "canonical": false,
+            "options": {
+                "symlink": true
+            }
+        }
+    ]
 }

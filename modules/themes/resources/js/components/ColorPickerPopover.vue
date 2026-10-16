@@ -1,0 +1,378 @@
+<script setup lang="ts">
+import { Input } from '@/components/ui/input';
+import {
+    NumberField,
+    NumberFieldContent,
+    NumberFieldDecrement,
+    NumberFieldIncrement,
+    NumberFieldInput,
+} from '@/components/ui/number-field';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { computed, onUnmounted, ref, watch } from 'vue';
+import IconEyedropper from '~icons/fa-solid/eye-dropper';
+import IconChevronUpDown from '~icons/heroicons/chevron-up-down';
+import IconPalette from '~icons/lucide/palette';
+import IconTailwind from '~icons/mdi/tailwind';
+import TailwindColorPicker from './TailwindColorPicker.vue';
+import {
+    clamp,
+    colorToHsv,
+    hsvToRgb,
+    nudgeColorArea,
+    rgbToHex,
+    rgbToHsv,
+} from '../lib/color';
+
+const model = defineModel<string>({ default: '' });
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+
+const activeTab = ref<'custom' | 'tailwind'>('custom');
+
+// ── Color conversions ─────────────────────────────────────────────────────────
+
+// ── Custom picker state ───────────────────────────────────────────────────────
+
+const isOpen = ref(false);
+const hue = ref(0);
+const saturation = ref(100);
+const brightness = ref(100);
+const mode = ref<'rgb' | 'hex'>('rgb');
+const gradientRef = ref<HTMLElement | null>(null);
+
+function initFromHex(color: string) {
+    const { h, s, v } = colorToHsv(color);
+    hue.value = h;
+    saturation.value = s;
+    brightness.value = v;
+}
+
+watch(model, (val) => {
+    if (!isOpen.value) {
+        initFromHex(val);
+    }
+});
+watch(isOpen, (v) => {
+    if (v) {
+        initFromHex(model.value);
+    }
+});
+
+const currentRgb = computed(() =>
+    hsvToRgb(hue.value, saturation.value, brightness.value),
+);
+const currentHex = computed(() =>
+    rgbToHex(currentRgb.value.r, currentRgb.value.g, currentRgb.value.b),
+);
+const hueHsl = computed(() => `hsl(${hue.value}, 100%, 50%)`);
+const hexInput = ref('');
+watch(
+    currentHex,
+    (v) => {
+        hexInput.value = v.slice(1).toUpperCase();
+    },
+    { immediate: true },
+);
+
+function updateFromPointer(e: MouseEvent | TouchEvent) {
+    if (!gradientRef.value) return;
+    const rect = gradientRef.value.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    saturation.value = clamp((clientX - rect.left) / rect.width, 0, 1) * 100;
+    brightness.value =
+        (1 - clamp((clientY - rect.top) / rect.height, 0, 1)) * 100;
+    model.value = currentHex.value;
+}
+
+let isDragging = false;
+let cleanupDrag: (() => void) | null = null;
+
+function startDrag(e: MouseEvent | TouchEvent) {
+    e.preventDefault();
+    isDragging = true;
+    updateFromPointer(e);
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+        if (isDragging) updateFromPointer(ev);
+    };
+    const onUp = () => {
+        isDragging = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('touchmove', onMove as EventListener);
+        window.removeEventListener('touchend', onUp);
+        cleanupDrag = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchmove', onMove as EventListener, {
+        passive: false,
+    });
+    window.addEventListener('touchend', onUp);
+    cleanupDrag = onUp;
+}
+
+function onAreaKeydown(e: KeyboardEvent) {
+    const next = nudgeColorArea(
+        saturation.value,
+        brightness.value,
+        e.key,
+        e.shiftKey,
+    );
+    if (!next) return;
+    e.preventDefault();
+    saturation.value = next.s;
+    brightness.value = next.v;
+    model.value = currentHex.value;
+}
+
+onUnmounted(() => {
+    isDragging = false;
+    cleanupDrag?.();
+});
+
+function onHueInput(e: Event) {
+    hue.value = Number((e.target as HTMLInputElement).value);
+    model.value = currentHex.value;
+}
+
+const hasEyeDropper = typeof window !== 'undefined' && 'EyeDropper' in window;
+const isEyeDropperOpen = ref(false);
+
+async function pickFromScreen() {
+    try {
+        isEyeDropperOpen.value = true;
+
+        // @ts-expect-error — EyeDropper is not yet in TS DOM lib
+        const dropper = new window.EyeDropper();
+
+        const { sRGBHex } = await dropper.open();
+        initFromHex(sRGBHex);
+        model.value = sRGBHex;
+    } catch {
+        // cancelled
+    } finally {
+        isEyeDropperOpen.value = false;
+    }
+}
+
+function onRgbChange(channel: 'r' | 'g' | 'b', val: number | undefined) {
+    if (val === undefined) return;
+    val = clamp(val, 0, 255);
+    const rgb = { ...currentRgb.value, [channel]: val };
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    if (hsv.s > 0) hue.value = hsv.h;
+    saturation.value = hsv.s;
+    brightness.value = hsv.v;
+    model.value = currentHex.value;
+}
+
+function onHexChange(e: Event) {
+    const val = (e.target as HTMLInputElement).value.replace(
+        /[^0-9a-fA-F]/g,
+        '',
+    );
+    hexInput.value = val.toUpperCase();
+    if (val.length === 6) {
+        initFromHex('#' + val);
+        model.value = '#' + val.toLowerCase();
+    }
+}
+
+function selectTailwind(hex: string) {
+    model.value = hex;
+    isOpen.value = false;
+}
+</script>
+
+<template>
+    <Popover v-model:open="isOpen">
+        <PopoverTrigger as-child>
+            <slot />
+        </PopoverTrigger>
+        <PopoverContent
+            class="w-85 overflow-hidden p-0"
+            :side-offset="6"
+            :class="{ 'opacity-0': isEyeDropperOpen }"
+            align="start"
+        >
+            <!-- Tab bar -->
+            <div class="border-border flex border-b">
+                <button
+                    class="bg-card flex flex-1 items-center justify-center gap-1.5 px-3 py-3 text-xs font-medium transition-colors"
+                    :class="
+                        activeTab === 'custom'
+                            ? 'text-foreground bg-card -mb-px border-r'
+                            : 'text-muted-foreground hover:text-foreground bg-muted'
+                    "
+                    @click="activeTab = 'custom'"
+                >
+                    <IconPalette class="size-5" />
+                    {{ $t('Color Picker') }}
+                </button>
+                <button
+                    class="flex flex-1 items-center justify-center gap-1.5 px-3 py-3 text-xs font-medium transition-colors"
+                    :class="
+                        activeTab === 'tailwind'
+                            ? 'text-foreground bg-card -mb-px border-l'
+                            : 'text-muted-foreground hover:text-foreground bg-muted'
+                    "
+                    @click="activeTab = 'tailwind'"
+                >
+                    <IconTailwind class="size-5 text-sky-400" />
+                    {{ $t('Tailwind Colors') }}
+                </button>
+            </div>
+
+            <!-- Custom Color tab -->
+            <template v-if="activeTab === 'custom'">
+                <!-- Gradient picker area -->
+                <div
+                    ref="gradientRef"
+                    role="slider"
+                    tabindex="0"
+                    :aria-label="$t('Saturation and brightness')"
+                    :aria-valuenow="Math.round(saturation)"
+                    :aria-valuetext="`${Math.round(saturation)}%, ${Math.round(brightness)}%, ${currentHex}`"
+                    class="focus-visible:ring-ring relative h-40 w-full cursor-crosshair select-none focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+                    :style="{ background: hueHsl }"
+                    @mousedown="startDrag"
+                    @touchstart.prevent="startDrag"
+                    @keydown="onAreaKeydown"
+                >
+                    <div
+                        class="pointer-events-none absolute inset-0"
+                        style="
+                            background: linear-gradient(
+                                to right,
+                                white,
+                                transparent
+                            );
+                        "
+                    />
+                    <div
+                        class="pointer-events-none absolute inset-0"
+                        style="
+                            background: linear-gradient(
+                                to bottom,
+                                transparent,
+                                black
+                            );
+                        "
+                    />
+                    <div
+                        class="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-sm ring-1 ring-black/30"
+                        :style="{
+                            left: `${saturation}%`,
+                            top: `${100 - brightness}%`,
+                            background: currentHex,
+                        }"
+                    />
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-2.5 p-2.5">
+                    <div class="flex items-center gap-2">
+                        <button
+                            v-if="hasEyeDropper"
+                            class="text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring bg-muted shrink-0 rounded-md p-1.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                            :title="$t('Pick color from screen')"
+                            @click="pickFromScreen"
+                        >
+                            <IconEyedropper class="size-4" />
+                        </button>
+                        <div
+                            class="border-border size-9 shrink-0 rounded-full border-2 shadow-sm"
+                            :style="{ background: currentHex }"
+                        />
+                        <input
+                            type="range"
+                            min="0"
+                            max="360"
+                            :value="hue"
+                            :aria-label="$t('Hue')"
+                            class="color-picker-hue-slider flex-1"
+                            @input="onHueInput"
+                        />
+                    </div>
+
+                    <div v-if="mode === 'rgb'" class="flex items-end gap-1.5">
+                        <div
+                            v-for="ch in ['r', 'g', 'b'] as const"
+                            :key="ch"
+                            class="min-w-0 flex-1"
+                        >
+                            <NumberField
+                                :model-value="currentRgb[ch]"
+                                :min="0"
+                                :max="255"
+                                :step="1"
+                                @update:model-value="(v) => onRgbChange(ch, v)"
+                            >
+                                <NumberFieldContent>
+                                    <NumberFieldDecrement />
+                                    <NumberFieldInput
+                                        class="dark:bg-input/30 focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                                    />
+                                    <NumberFieldIncrement />
+                                </NumberFieldContent>
+                            </NumberField>
+                            <p
+                                class="text-muted-foreground mt-1 text-center text-[10px] tracking-widest uppercase"
+                            >
+                                {{ ch }}
+                            </p>
+                        </div>
+                        <button
+                            class="border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground mb-5 shrink-0 rounded-md border p-1.5 transition-colors"
+                            :title="$t('Switch to hex input')"
+                            @click="mode = 'hex'"
+                        >
+                            <IconChevronUpDown class="size-4" />
+                        </button>
+                    </div>
+
+                    <div v-else class="flex items-end gap-1.5">
+                        <div class="min-w-0 flex-1">
+                            <div
+                                class="border-input bg-background focus-within:border-ring focus-within:ring-ring/50 dark:bg-input/30 flex overflow-hidden rounded-md border shadow-xs transition-[color,box-shadow] focus-within:ring-[3px]"
+                            >
+                                <span
+                                    class="text-muted-foreground flex items-center pl-3 text-sm"
+                                    >#</span
+                                >
+                                <Input
+                                    type="text"
+                                    maxlength="6"
+                                    :aria-label="$t('Hex')"
+                                    :model-value="hexInput"
+                                    class="text-foreground rounded-none border-0 bg-transparent uppercase tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent"
+                                    @input="onHexChange"
+                                />
+                            </div>
+                            <p
+                                class="text-muted-foreground mt-1 text-center text-[10px] tracking-widest uppercase"
+                            >
+                                Hex
+                            </p>
+                        </div>
+                        <button
+                            class="border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground mb-5 shrink-0 rounded-md border p-1.5 transition-colors"
+                            :title="$t('Switch to RGB input')"
+                            @click="mode = 'rgb'"
+                        >
+                            <IconChevronUpDown class="size-4" />
+                        </button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Tailwind Colors tab -->
+            <TailwindColorPicker v-else @select="selectTailwind" />
+        </PopoverContent>
+    </Popover>
+</template>

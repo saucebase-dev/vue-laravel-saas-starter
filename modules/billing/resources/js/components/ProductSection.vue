@@ -1,0 +1,145 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue';
+
+import type {
+    PlanAction,
+    PlanActions,
+    Product,
+} from '@modules/billing/resources/js/types';
+import {
+    getIntervalLabel,
+    matchesInterval,
+    normalizeInterval,
+} from '../lib/intervals';
+
+import ProductCard from './ProductCard.vue';
+
+const props = defineProps<PlanActions & { products: Product[] }>();
+
+/** A plan with no price for this interval shows only when it has something to say. */
+function planAction(product: Product): PlanAction {
+    const price = product.prices[0];
+
+    return price
+        ? (props.priceActions[price.id] ?? 'unavailable')
+        : (props.productActions[product.id] ?? 'unavailable');
+}
+
+const availableIntervals = computed(() => {
+    if (!props.products) return [];
+
+    const intervals = new Set<string>();
+    for (const product of props.products) {
+        for (const price of product.prices) {
+            intervals.add(normalizeInterval(price.interval));
+        }
+    }
+
+    // Sort order: one_time, day, week, month, year
+    const order = ['one_time', 'day', 'week', 'month', 'year'];
+    return Array.from(intervals).sort(
+        (a, b) => order.indexOf(a) - order.indexOf(b),
+    );
+});
+
+const billingInterval = ref<string>('month');
+
+// Set default to first available interval when products change
+watch(
+    availableIntervals,
+    (intervals) => {
+        if (
+            intervals.length > 0 &&
+            !intervals.includes(billingInterval.value)
+        ) {
+            billingInterval.value = intervals[0];
+        }
+    },
+    { immediate: true },
+);
+
+const filteredProducts = computed(() => {
+    if (!props.products) return [];
+
+    return props.products
+        .map((product) => ({
+            ...product,
+            prices: product.prices.filter((price) =>
+                matchesInterval(price.interval, billingInterval.value),
+            ),
+        }))
+        .filter(
+            (product) =>
+                product.prices.length > 0 ||
+                (props.productActions[product.id] ?? 'unavailable') !==
+                    'unavailable',
+        );
+});
+
+function getToggleLabel(interval: string): string {
+    if (interval === 'one_time') return 'One-time';
+    return getIntervalLabel(interval);
+}
+</script>
+
+<template>
+    <section id="pricing" class="relative w-full overflow-hidden px-6 py-32">
+        <slot />
+        <!-- Billing Toggle -->
+        <div
+            v-if="availableIntervals.length > 1"
+            class="mt-16 flex justify-center"
+        >
+            <div
+                class="bg-card/35 relative flex items-center rounded-xl p-1 shadow-lg"
+            >
+                <button
+                    v-for="interval in availableIntervals"
+                    :key="interval"
+                    @click="billingInterval = interval"
+                    :class="[
+                        'relative z-10 rounded-xl px-6 py-2 text-sm font-medium transition-all duration-200',
+                        billingInterval === interval
+                            ? 'bg-primary text-white'
+                            : 'text-foreground/70 hover:text-foreground',
+                    ]"
+                >
+                    {{ $t(getToggleLabel(interval)) }}
+                </button>
+            </div>
+        </div>
+
+        <div
+            v-if="filteredProducts.length === 0"
+            class="bg-muted/70 text-muted-foreground mx-auto mt-16 max-w-xl rounded-lg p-4 text-center text-xl"
+            data-testid="pricing-empty"
+        >
+            {{
+                $t('No plans are available right now. Please check back soon.')
+            }}
+        </div>
+
+        <!-- Pricing Cards -->
+        <div
+            v-else
+            class="mx-auto mt-16 grid grid-cols-1 gap-8"
+            :class="{
+                'max-w-[450px]': filteredProducts.length === 1,
+                'max-w-6xl': filteredProducts.length > 1,
+                'lg:grid-cols-2': filteredProducts.length === 2,
+                'lg:grid-cols-3': filteredProducts.length === 3,
+                'lg:grid-cols-4': filteredProducts.length >= 4,
+            }"
+        >
+            <ProductCard
+                v-for="product in filteredProducts"
+                :key="product.id"
+                :product="product"
+                :price="product.prices[0]"
+                :action="planAction(product)"
+            />
+        </div>
+
+        <slot name="footer" />
+    </section>
+</template>

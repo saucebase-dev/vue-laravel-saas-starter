@@ -1,0 +1,44 @@
+{
+  "name": "saucebase/roadmap",
+  "description": "A public roadmap for Saucebase: feature requests, upvotes, comments and team replies.",
+  "type": "saucebase-module",
+  "license": "MIT",
+  "version": "v3.3.0",
+  "require": {
+    "saucebase/core": "^1.13"
+  },
+  "authors": [
+    {
+      "name": "Saucebase",
+      "email": "hello@saucebase.dev"
+    }
+  ],
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Roadmap\\Providers\\RoadmapServiceProvider"
+      ],
+      "aliases": {}
+    },
+    "saucebase": {
+      "frameworks": [
+        "vue",
+        "react"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Roadmap\\": "src/",
+      "Modules\\Roadmap\\Database\\Factories\\": "database/factories/",
+      "Modules\\Roadmap\\Database\\Seeders\\": "database/seeders/",
+      "Modules\\Roadmap\\Tests\\Support\\": "tests/Support/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\Roadmap\\Tests\\": "tests/"
+    }
+  },
+  "minimum-stability": "stable"
+}

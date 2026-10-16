@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+    test:php:
+        desc: Run PHPUnit tests for Coming Soon
+        cmd: php -d memory_limit=2048M artisan test --testsuite=Modules --filter='^Modules\\ComingSoon\\Tests'
+    test:e2e:
+        desc: Run Coming Soon browser tests
+        cmd: npx playwright test --project="@coming-soon*" {{.CLI_ARGS}}
+        interactive: true
